@@ -11,10 +11,33 @@ document.head.appendChild(style);
 
 const subtitleBox = document.createElement('div');
 subtitleBox.id = 'isl-subtitle-box';
-subtitleBox.innerText = "ISL-Connect: Loading Sandbox...";
+subtitleBox.innerText = "ISL-Connect: Connecting to Core Networks...";
 document.body.appendChild(subtitleBox);
 
-// 2. Create and append the invisible sandbox frame
+// 2. INITIALIZE WEBSOCKET ONLY ONCE (Points to your i5 laptop server)
+const socket = new WebSocket("ws://192.168.0.61:8000/ws/v1/translate"); 
+
+socket.onopen = () => {
+    console.log("%c CONNECTED: Linked to i5 Server AI Engine! ", "background: #8e44ad; color: #fff; font-weight: bold;");
+    subtitleBox.innerText = "ISL-Connect: Connected to Server. Loading Sandbox...";
+};
+
+socket.onmessage = (event) => {
+    try {
+        const response = JSON.parse(event.data);
+        // Display the text returned from the i5 server inside your yellow subtitle box
+        subtitleBox.innerText = response.text;
+    } catch (err) {
+        console.error("Failed to parse incoming server translation string: ", err);
+    }
+};
+
+socket.onerror = (error) => {
+    console.error("WebSocket Pipeline Error: ", error);
+    subtitleBox.innerText = "ISL-Connect: Server Offline";
+};
+
+// 3. Create and append the invisible sandbox frame
 const iframe = document.createElement('iframe');
 iframe.src = chrome.runtime.getURL('sandbox.html');
 iframe.style.display = 'none';
@@ -23,25 +46,27 @@ document.body.appendChild(iframe);
 let trackerReady = false;
 let frameCounter = 0;
 
-// 3. Listen for incoming coordinate data from the sandbox environment
+// 4. Listen for incoming coordinate data calculated by the sandbox environment
 window.addEventListener("message", (event) => {
   if (event.data.type === "TRACKER_READY") {
     trackerReady = true;
-    subtitleBox.innerText = "ISL-Connect: Tracking Active!";
-    console.log("%c SUCCESS: Sandbox Tracker Connected! ", "background: #2ecc71; color: #fff; font-size: 14px;");
+    subtitleBox.innerText = "ISL-Connect: System Active & Live!";
+    console.log("%c SUCCESS: Sandbox Tracker Ready! ", "background: #2ecc71; color: #fff; font-size: 14px;");
     startFrameCaptureLoop();
   }
   
   if (event.data.type === "COORDINATES") {
     const coords = event.data.data;
-    console.log(
-      `%c SANDBOX DATA -> X: ${coords.x.toFixed(2)} | Y: ${coords.y.toFixed(2)} | Z: ${coords.z.toFixed(2)}`, 
-      "color: #3498db; font-weight: bold;"
-    );
+    console.log(`SANDBOX DATA -> X: ${coords.x.toFixed(2)} | Y: ${coords.y.toFixed(2)}`);
+
+    // Send the clean coordinates to the i5 server over the open pipeline
+    if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ landmarks: coords }));
+    }
   }
 });
 
-// 4. Capture Google Meet frames and extract raw transferrable pixel buffers
+// 5. Capture Google Meet frames and extract raw transferrable pixel buffers
 function startFrameCaptureLoop() {
   const videoElement = document.querySelector('video');
   
@@ -60,7 +85,7 @@ function startFrameCaptureLoop() {
         ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
         const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         
-        // Convert the structural image data data array into an explicit transferrable ArrayBuffer
+        // Convert the structural image data array into an explicit transferrable ArrayBuffer
         const buffer = imgData.data.buffer;
         
         iframe.contentWindow.postMessage({
@@ -69,23 +94,6 @@ function startFrameCaptureLoop() {
           height: canvas.height,
           buffer: buffer
         }, "*", [buffer]); // Passing the buffer array directly avoids serialization lag
-        // Connect to your i5 laptop's local IP address
-const socket = new WebSocket("ws://192.168.0.61:8000/ws/v1/translate"); 
-
-socket.onopen = () => {
-    console.log("Connected to the i5 AI Engine!");
-};
-
-socket.onmessage = (event) => {
-    const response = JSON.parse(event.data);
-    // Directly inject the backend text into your yellow subtitle box!
-    document.getElementById("isl-subtitle-box").innerText = response.text;
-};
-
-// Inside your startTrackingLoop() function, send coordinates like this:
-if (results.landmarks && results.landmarks.length > 0) {
-    socket.send(JSON.stringify({ landmarks: results.landmarks[0] }));
-}
         
       } catch (err) {
         console.warn("Frame extraction skipped due to canvas sync: ", err.message);
