@@ -69,6 +69,23 @@ function startFrameCaptureLoop() {
           height: canvas.height,
           buffer: buffer
         }, "*", [buffer]); // Passing the buffer array directly avoids serialization lag
+        // Connect to your i5 laptop's local IP address
+const socket = new WebSocket("ws://192.168.0.61:8000/ws/v1/translate"); 
+
+socket.onopen = () => {
+    console.log("Connected to the i5 AI Engine!");
+};
+
+socket.onmessage = (event) => {
+    const response = JSON.parse(event.data);
+    // Directly inject the backend text into your yellow subtitle box!
+    document.getElementById("isl-subtitle-box").innerText = response.text;
+};
+
+// Inside your startTrackingLoop() function, send coordinates like this:
+if (results.landmarks && results.landmarks.length > 0) {
+    socket.send(JSON.stringify({ landmarks: results.landmarks[0] }));
+}
         
       } catch (err) {
         console.warn("Frame extraction skipped due to canvas sync: ", err.message);
